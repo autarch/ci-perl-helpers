@@ -1,3 +1,10 @@
+## 0.1.6
+
+* Foo
+
+* Bar baz
+  foo
+
 ## 0.1.5 2020-04-10
 
 * Fixed bugs that prevented testing of dists that used `Module::Build` or
