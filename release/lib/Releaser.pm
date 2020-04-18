@@ -143,24 +143,14 @@ my $CIPerlHelpersID
     = git::remote( 'show', 'origin' ) =~ /\Qgit\@github.com:autarch/ ? 20 : 7;
 
 sub _wait_for_ci_perl_helpers_build ($self) {
-    my $cutoff  = DateTime->now->subtract( minutes => 5 );
-    my $matcher = sub ( $self, $build ) {
-        use Devel::Dwarn; Dwarn $build;
-        my $id = $build->{definition}{id};
-        return () unless $build->{definition}{id} == $CIPerlHelpersID;
-        return ()
-            unless $build->{status} eq 'inProgress'
-            || $build->{status} eq 'notStarted'
-            || $build->{status} eq 'postponed';
-
-        my $qt = $self->_dt( $build->{queueTime} );
-        return () unless $qt >= $cutoff;
-
-        return { build => $build, at => $qt };
-    };
+    my $cutoff = DateTime->now->subtract( minutes => 5 );
 
     my $desc = 'ci-perl-helpers build';
-    my ($build) = $self->_wait_for_builds_to_queue( $desc, $matcher );
+    my ($build) = $self->_wait_for_builds_to_queue(
+        $desc,
+        [$CIPerlHelpersID],
+        $cutoff,
+    );
 
     $self->_wait_for_builds_to_finish(
         DateTime::Duration->new( hours => 2 ),
@@ -229,19 +219,6 @@ sub _update_integration_projects ($self) {
 sub _queued_builds_for ( $self, %pushed ) {
     my $cutoff = DateTime->now->subtract( minutes => 5 );
 
-    my %matched;
-    my $matcher = sub ( $self, $build ) {
-        my $id = $build->{definition}{id};
-        return () unless $pushed{$id};
-
-        my $qt = $self->_dt( $build->{queueTime} );
-        return () if $qt >= $cutoff;
-
-        $matched{$id} = { build => $build, at => $qt };
-
-        return values %matched if keys %matched == keys %pushed;
-    };
-
     my $desc = join q{, }, sort keys %pushed;
     $desc .= ' builds';
 
@@ -251,7 +228,9 @@ sub _queued_builds_for ( $self, %pushed ) {
     my $waited     = 0;
 
     my %queued;
-    for my $matched ( $self->_wait_for_builds_to_queue( $desc, $matcher ) ) {
+    for my $matched (
+        $self->_wait_for_builds_to_queue( $desc, [ keys %pushed ], $cutoff ) )
+    {
         my $id = $matched->{build}{definition}{id};
         $queued{ $pushed{$id} } = {
             build_id => $matched->{build}{id},
@@ -262,13 +241,11 @@ sub _queued_builds_for ( $self, %pushed ) {
     return %queued;
 }
 
-sub _wait_for_builds_to_queue ( $self, $desc, $matcher ) {
+sub _wait_for_builds_to_queue ( $self, $desc, $definition_ids, $cutoff ) {
     my $sleep_time      = 5;
     my $wait            = 120;
     my $started_waiting = DateTime->now;
     my $formatter       = DateTime::Format::Human::Duration->new;
-
-    my @builds;
 
     # We're just waiting until the build is queued, which should happen
     # quickly, as opposed to waiting for it to finish.
@@ -284,7 +261,7 @@ sub _wait_for_builds_to_queue ( $self, $desc, $matcher ) {
             ),
         ) or die $!;
 
-        @builds = $self->_find_matching_builds($matcher);
+        my @builds = $self->_find_matching_builds( $definition_ids, $cutoff );
         if (@builds) {
             say sprintf(
                 '  found %d queued builds that matched our criteria',
@@ -295,18 +272,15 @@ sub _wait_for_builds_to_queue ( $self, $desc, $matcher ) {
             say '  did not find any queued builds that matched our criteria'
                 or die $!;
         }
-        return @builds if @builds;
+        return @builds if scalar @builds == scalar $definition_ids->@*;
 
-        if ( $started_waiting->clone->add( seconds => $wait ) < $now ) {
-            my $err
-                = sprintf( 'Waited two minutes for %s to be queued', $desc );
-            die $err;
-        }
+        last if $started_waiting->clone->add( seconds => $wait ) < $now;
 
         sleep $sleep_time;
     }
 
-    return @builds;
+    my $err = sprintf( 'Waited two minutes for %s to be queued', $desc );
+    die $err;
 }
 
 sub _wait_for_builds_to_finish ( $self, $wait, $desc, %queued ) {
@@ -372,11 +346,14 @@ sub _queue_build ( $self, $project, $definition_id ) {
     return ( $response->{id}, $self->_dt( $response->{queueTime} ) );
 }
 
-sub _find_matching_builds ( $self, $matcher ) {
+sub _find_matching_builds ( $self, $definition_ids, $cutoff ) {
     my $uri = $self->_make_azure_uri(
         '/build/builds',
         queryOrder             => 'queueTimeDescending',
         maxBuildsPerDefinition => 2,
+        definitions            => ( join ',', $definition_ids->@* ),
+        statusFilter           => 'inProgress,notStarted,postponed',
+        minTime => DateTime::Format::RFC3339->format_datetime($cutoff),
     );
 
     my $builds = $self->_request(
@@ -385,7 +362,13 @@ sub _find_matching_builds ( $self, $matcher ) {
         $self->_azure_authz_header,
     );
 
-    return grep { $self->$matcher($_) } $builds->{value}->@*;
+    my @matched;
+    for my $build ( $builds->{value}->@* ) {
+        my $qt = $self->_dt( $build->{queueTime} );
+        push @matched, { build => $build, at => $qt };
+    }
+
+    return @matched;
 }
 
 sub _build_is_done ( $self, $project, $build_id ) {
