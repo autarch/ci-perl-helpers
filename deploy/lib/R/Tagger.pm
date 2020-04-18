@@ -39,7 +39,7 @@ sub _build_image_versions {
     return [ sort @versions ];
 }
 
-my $TagRoot = 'houseabsolute/ci-perl-helpers-ubuntu';
+my $TagRoot = 'autarch/ci-perl-helpers-ubuntu';
 
 ## no critic (Subroutines::ProhibitUnusedPrivateSubroutines)
 sub _tag_root {$TagRoot}

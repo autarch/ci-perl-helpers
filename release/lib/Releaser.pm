@@ -140,7 +140,7 @@ sub _commit_tag_and_push ( $self, $tag ) {
 
 # This is the ID of the pipeline for this project.
 my $CIPerlHelpersID
-    = git::remote( 'show', 'origin' ) =~ /\Qgit@github.com:autarch/ ? 20 : 7;
+    = git::remote( 'show', 'origin' ) =~ /\Qgit\@github.com:autarch/ ? 20 : 7;
 
 sub _wait_for_ci_perl_helpers_build ($self) {
     my $cutoff  = DateTime->now->subtract( minutes => 5 );
@@ -165,7 +165,7 @@ sub _wait_for_ci_perl_helpers_build ($self) {
     $self->_wait_for_builds_to_finish(
         DateTime::Duration->new( hours => 2 ),
         $desc,
-        'houseabsolute/ci-perl-helpers' => {
+        'autarch/ci-perl-helpers' => {
             build_id => $build->{build}{id},
             at       => $self->_dt( $build->{queueTime} ),
         },

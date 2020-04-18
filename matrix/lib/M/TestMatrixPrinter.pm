@@ -643,7 +643,7 @@ sub _base_job {
 
     if ( $self->{os} eq 'Linux' ) {
         $job{container} = sprintf(
-            'houseabsolute/ci-perl-helpers-ubuntu:%s%s-%s',
+            'autarch/ci-perl-helpers-ubuntu:%s%s-%s',
             $perl_param,
             ( $threads ? '-threads' : q{} ),
             $self->{image_version},
