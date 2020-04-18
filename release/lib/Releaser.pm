@@ -349,8 +349,7 @@ sub _queue_build ( $self, $project, $definition_id ) {
 sub _find_matching_builds ( $self, $definition_ids, $cutoff ) {
     my $uri = $self->_make_azure_uri(
         '/build/builds',
-        queryOrder             => 'queueTimeDescending',
-        maxBuildsPerDefinition => 2,
+        maxBuildsPerDefinition => 1,
         definitions            => ( join ',', $definition_ids->@* ),
         statusFilter           => 'inProgress,notStarted,postponed',
         minTime => DateTime::Format::RFC3339->format_datetime($cutoff),
