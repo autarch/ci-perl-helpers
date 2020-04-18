@@ -10,7 +10,6 @@ trigger:
     exclude:
       - .gitignore
       - .test-vars-ignore
-      - Changes.md
       - cron/
       - dev/
       - git/
